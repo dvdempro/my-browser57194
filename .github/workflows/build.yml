@@ -42,17 +42,15 @@ jobs:
           libtool \
           pkg-config
 
-    - name: Install Buildozer & Cython
+    - name: Install Buildozer & Cython globally
       run: |
-        pip install --upgrade pip
-        pip install --user Cython==0.29.36
-        pip install --user buildozer
+        sudo pip3 install --upgrade pip
+        sudo pip3 install Cython==0.29.36
+        sudo pip3 install buildozer
 
     - name: Build APK with Buildozer
-      env:
-        HOME: ${{ github.workspace }}
       run: |
-        ~/.local/bin/buildozer -v android debug
+        buildozer -v android debug
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
