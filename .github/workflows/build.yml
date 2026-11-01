@@ -5,7 +5,6 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-# Отменяет предыдущие запуски, если ты запушил новый коммит
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,7 +14,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout repository
+    - name: Checkout
       uses: actions/checkout@v4
 
     - name: Set up Python 3.10
@@ -33,18 +32,16 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          git zip unzip autoconf libtool pkg-config \
-          zlib1g-dev libncurses5-dev libncursesw5-dev \
-          libtinfo5 cmake libffi-dev libssl-dev \
-          build-essential ccache
+          git zip unzip openjdk-17-jdk \
+          autoconf libtool pkg-config zlib1g-dev \
+          libncurses5-dev libncursesw5-dev libtinfo5 cmake \
+          libffi-dev libssl-dev build-essential ccache
 
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          buildozer-global-
+        key: buildozer-${{ hashFiles('buildozer.spec') }}
 
     - name: Install pip dependencies
       run: |
@@ -52,22 +49,24 @@ jobs:
         pip install Cython==0.29.36
         pip install buildozer
 
-    # ЭТОТ ШАГ РЕШАЕТ ПРОБЛЕМУ С ЗАВИСАНИЕМ НА ЛИЦЕНЗИИ
-    - name: Accept Android SDK licenses
+    # ИСПРАВЛЕНИЕ 1: Гарантируем наличие sdkmanager перед работой Buildozer
+    - name: Ensure sdkmanager exists
       run: |
+        mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin
+        # Если sdkmanager нет, он скачается при первом запуске buildozer,
+        # но мы заранее создаем папки и лицензии, чтобы он не спотыкался
         export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
         mkdir -p $ANDROID_SDK_ROOT/licenses
         echo -e "\n8933bad161af4b6a5b573652ffc7aaf3aee85a47" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
         echo -e "\nd56f5187479451eabf01fb78af6dfcb131b33910" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
         echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/google-tv-preview-license
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
 
-    - name: Build APK with Buildozer
+    # ИСПРАВЛЕНИЕ 2: echo y вместо yes, чтобы не было Broken pipe
+    - name: Build APK
       run: |
-        # Даже если buildozer спросит лицензию, 'yes' автоматически ответит 'y'
-        yes | buildozer -v android debug
+        echo y | buildozer -v android debug
 
-    - name: Upload APK Artifact
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: mybrowser-apk
