@@ -5,12 +5,17 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+# Отменяет предыдущие запуски, если ты запушил новый коммит
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout
+    - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Set up Python 3.10
@@ -18,27 +23,51 @@ jobs:
       with:
         python-version: '3.10'
 
+    - name: Set up Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
     - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          git zip unzip openjdk-17-jdk \
-          autoconf libtool pkg-config \
+          git zip unzip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev \
           libtinfo5 cmake libffi-dev libssl-dev \
-          build-essential
+          build-essential ccache
 
-    - name: Install pip packages
+    - name: Cache Buildozer global directory
+      uses: actions/cache@v4
+      with:
+        path: ~/.buildozer
+        key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+        restore-keys: |
+          buildozer-global-
+
+    - name: Install pip dependencies
       run: |
         python -m pip install --upgrade pip
         pip install Cython==0.29.36
         pip install buildozer
 
-    - name: Build APK (debug)
+    # ЭТОТ ШАГ РЕШАЕТ ПРОБЛЕМУ С ЗАВИСАНИЕМ НА ЛИЦЕНЗИИ
+    - name: Accept Android SDK licenses
       run: |
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        mkdir -p $ANDROID_SDK_ROOT/licenses
+        echo -e "\n8933bad161af4b6a5b573652ffc7aaf3aee85a47" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
+        echo -e "\nd56f5187479451eabf01fb78af6dfcb131b33910" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
+        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/google-tv-preview-license
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
+
+    - name: Build APK with Buildozer
+      run: |
+        # Даже если buildozer спросит лицензию, 'yes' автоматически ответит 'y'
         yes | buildozer -v android debug
 
-    - name: Upload APK
+    - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: mybrowser-apk
